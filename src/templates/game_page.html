@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Lets Play BINGO</h1>
+    <p> Game ID: {{ gameId }} </p>
+    <p>Player Name: <span id="playerName">{{ playerName }}</span> </p>
+    <p>Opponent Name: <span id="opponentName">{{ opponentName }}</span> </p>
+
+    <span id="B" class="bingo"> B </span> 
+    <span id="I" class="bingo"> I </span> 
+    <span id="N" class="bingo"> N </span> 
+    <span id="G" class="bingo"> G </span> 
+    <span id="O" class="bingo"> O </span> <br>
+    <button onclick="createTable(5, 5)">Create Table</button>
+    <button onclick="startgame()">Start Game</button>
+    <button onclick="randonizeTable()">Randomize Table</button>
+</body>
+<script>
+    var game_started = false;
+    var increment_value = 1;
+    var populated_cells = [];
+
+    function createTable(num_rows, num_cols) {
+        const table = document.createElement('table');
+        for (let i = 0; i < num_rows; i++) {
+            const row = document.createElement('tr');
+            row.setAttribute('id', `row${i}`);
+            for (let j = 0; j < num_cols; j++) {
+                const cell = document.createElement('td');
+                cell.addEventListener('click', () => populateCell(i, j));
+                cell.setAttribute('id', `r${i}c${j}`);
+                cell.textContent = `Row ${i + 1} Col ${j + 1}`;
+                row.appendChild(cell);
+            }
+            table.appendChild(row);
+        }
+        document.body.appendChild(table);
+    }
+
+    function populateCell(row, col) {
+        const cell = document.getElementById(`r${row}c${col}`);
+        if (game_started && cell) {
+            cell.style.textDecoration = 'line-through';
+        }
+        else  if (cell && !game_started && !populated_cells.includes(cell.id)) {
+            cell.textContent = increment_value++;
+            populated_cells.push(cell.id);
+        }
+    }
+    function randonizeTable() {
+        const table = document.querySelector('table');
+        const cells = table.querySelectorAll('td');
+        const unq = new Set();
+        cells.forEach((cell, index) => {
+            populated_cells.push(cell.id);
+            let value;
+            do {
+                value = Math.floor(Math.random() * cells.length) + 1;
+            } while (unq.has(value));
+            unq.add(value);
+            cell.textContent = value;
+        });
+    }
+    function AreAllpopulated() {
+        const table = document.querySelector('table');
+        const cells = table.querySelectorAll('td');
+        console.log("populated cells: " + populated_cells.length);
+        console.log("total cells: " + cells.length);
+        return populated_cells.length === cells.length;
+    }
+    function startgame() {
+        if (!AreAllpopulated()) {
+            alert("Please populate all cells before starting the game.");
+            return;
+        }
+        game_started = true;
+    }
+</script>
+</html>

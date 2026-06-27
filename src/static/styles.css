@@ -1,0 +1,61 @@
+#loading, .readydiv{
+    display: none;
+}
+
+.gameForm {
+    margin: 20px 20px 20px 20px;
+    padding-bottom: 10px;
+    padding-left: 10px;
+}
+label, button, input {
+    margin: 10px;
+}
+.bingo {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    color: #ffffff;
+    background-color: #4e66e0;
+    border-radius: 50%;
+    margin: 10px;
+}
+.strikeoff {
+    display: inline-block;
+    width: 40px;
+    height: 40px;
+    line-height: 40px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    color: #bebebe;
+    background-color: #e04e4e;
+    border-radius: 50%;
+    margin: 10px;
+}
+table {
+    border-collapse: collapse;
+    border: 1px solid #000000;
+    width: 50%;
+    margin: 20px 0 0 20px;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+th, td {
+    border: 1px solid #000000;
+    padding: 12px;
+    text-align: left;
+}
+
+tr:nth-child(even) {
+    background-color: #e2e2e2;
+}
+
+tr:hover {
+    background-color: #86aeeb;
+}

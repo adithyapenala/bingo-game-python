@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <title>Document</title>
+</head>
+<body>
+    <form method="post" class="gameForm">
+        <label for="playername">Player name:</label>
+        <input type="text" name="playername" id="playername"> <br>
+        <label for="game_id">Game ID:</label>
+        <input type="text" name="game_id" id="game_id"> <br>
+        <button onclick="joinGame()">Join Game</button>
+        <button onclick="createGame()">Create Game</button>
+    </form>
+    <p id="loading"></p>
+
+    <div class="readydiv">
+        <p>Game ID: <span id="GameID"></span></p>
+        <p>Player Name: <span id="myName"></span> </p>
+        <p>Opponent Name: <span id="OpponentName"></span></p>
+        <button onclick="readyForGame()" id="readybtn">Ready</button>  
+    </div>
+</body>
+<script>
+    function unhideLoading() {
+        document.querySelector('.gameForm').style.display = 'none';
+        document.getElementById('loading').textContent = 'waiting for other player to join...';
+    }
+
+    function hideLoading() {
+        document.getElementById('loading').style.display = 'none';
+    }
+
+    function waitForPlayer2(gameId) {
+        return new Promise((resolve, reject) => {
+            const evtSource = new EventSource(`/game/${gameId}/wait`);
+
+            evtSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.event === "player2_joined") {
+                    evtSource.close();
+                    resolve(data.player2name);  // ✅ this is what your await receives
+                }
+            };
+
+            evtSource.onerror = (err) => {
+                evtSource.close();
+                reject(new Error("SSE connection failed"));  // ✅ caught by your try/catch
+            };
+        });
+    }
+
+    async function getOpponentName(gameId, playerName) {
+        try {
+            const getOpponentUrl = new URL(`/game_opponent/${gameId}`, window.location.origin);
+            getOpponentUrl.searchParams.append('playerName', playerName);
+            const opponentResponse = await fetch(getOpponentUrl);
+
+            if (!opponentResponse.ok) throw new Error(`HTTP ${opponentResponse.status}`);
+
+            const opponentData = await opponentResponse.json();
+            // Guard against snake_case vs camelCase mismatch
+            return opponentData.opponentName ?? opponentData.opponent_name ?? null;
+        } catch (error) {
+            console.error('Error fetching opponent name:', error);
+            return null;
+        }
+    }
+
+    async function getGamePage(gameId, playerName, opponentName) {
+        try {
+            const game_url = new URL(`/game_page/${gameId}`, window.location.origin);
+                game_url.searchParams.append('playerName', playerName);
+                game_url.searchParams.append('opponentName', opponentName);
+
+                const game_page_response = await fetch(game_url);
+                if (game_page_response.ok) {
+                    window.location.href = game_url; // Redirect to the game page
+                } else {
+                    alert('Failed to load game page.');
+                }
+        } catch (error) {
+            console.error('Error fetching game page:', error);
+            alert('An error occurred while trying to load the game page.');
+        }
+    }
+    
+    async function joinGame() {
+        unhideLoading();
+        const playerName = document.getElementById('playername').value;
+        const gameId = document.getElementById('game_id').value;
+        
+        if (playerName == null || gameId == null) {
+            alert("enter name and game id");
+            return;
+        }
+
+        try {
+            const response = await fetch(`/join_game/${gameId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerName, gameId })
+            });
+
+            const data = await response.json();
+            console.log('join_game response:', data); // 👈 check this in devtools
+
+            // Handle both snake_case and camelCase from backend
+            const resolvedGameId = data.gameId ?? data.game_id;
+            document.getElementById("gameid").textContent = resolvedGameId;
+            document.getElementById("myName").textContent = playerName
+
+            if (data.success) {
+                const opponentName = await getOpponentName(resolvedGameId, playerName);
+                if (!opponentName) {
+                    alert('Failed to retrieve opponent name.');
+                } else {
+                    document.getElementById("readydiv").style.display = 'block';
+                    document.getElementById("OpponentName").textContent = opponentName;
+                }
+            } else {
+                alert('Failed to join game: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error in joinGame:', error);
+            alert('An error occurred while trying to join the game.');
+        }
+    }
+
+    async function createGame() {
+        unhideLoading();
+        const playerName = document.getElementById('playername').value;
+        if (playerName == null) {
+            alert(" enter your name !");
+            return ;
+        }
+        try {
+            const response = await fetch('/create_game', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerName })
+            });
+
+            const data = await response.json();
+            console.log('create_game response:', data); // 👈 check this in devtools
+
+            const resolvedGameId = data.gameId ?? data.game_id;
+            document.getElementById("gameid").textContent = resolvedGameId;
+            document.getElementById("myName").textContent = playerName;
+
+            if (data.success) {
+                const player2name = await waitForPlayer2(resolvedGameId);
+                console.log('player2name:', player2name);
+                document.getElementById("OpponentName").textContent = player2name;
+                document.getElementById("readydiv").style.display = 'block';
+            } else {
+                alert('Failed to create game: ' + data.message);
+            }
+        } catch (error) {
+            console.error('Error in createGame:', error);
+            alert('An error occurred while trying to create the game.');
+        }
+    }
+    
+    async function readyForGame() {
+        const gameid = document.getElementById("GameID").value;
+        const player2name = document.getElementById("OpponentName").value;
+        await getGamePage(gameid, playerName, player2name); // ✅ awaited
+    }
+</script>
+</html>
