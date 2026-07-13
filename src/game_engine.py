@@ -1,6 +1,7 @@
 
 import logging
 from enum import StrEnum, auto
+from collections import defaultdict
 from typing import List
 from random import shuffle
 from .settings import MAX_MATRIX_SIZE
@@ -134,6 +135,10 @@ class Matrix:
             for j in range(self.size):
                 self._data[i][j] = flat_list[i * self.size + j]
 
+    def to_list(self) -> List[List[int]]:
+        """ Returns the matrix as a list of lists. """
+        return self._data
+
     def calculate_score(self) -> int:
         """ Calculates the score of the given player."""
         return (
@@ -214,7 +219,7 @@ class GameLogic:
 
         self.ready_to_play = set()
 
-        self.listeners = []
+        self.listeners = {}
 
     @classmethod
     def create_game(cls, game_id: int, player_name: str, matrix_size: int):

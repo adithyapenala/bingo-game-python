@@ -13,6 +13,7 @@ from .settings import (
 from functools import wraps
 from random import randint
 from . import game_engine as ge
+from .pubsub_utils import *
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,10 @@ def GameIdCheck(target_state):
                 logger.error(msg)
                 raise ValueError(msg)
                 
-            if not isValidTranstion(game.state, target_state):
+            if (
+                target_state is not None and 
+                not isValidTranstion(game.state, target_state)
+            ):
                 msg = f"Cannot call {func.__qualname__} for Game_{game_id} at {game.state} stage."
                 logger.warning(msg)
                 raise InvalidGameStateTransitionException(msg)
@@ -140,10 +144,10 @@ class GameManager:
     """
     Params:
         games (dict): 
-            tracks active games.
+            tracks active games. key is game_id, value is `GameLogic` instance.
        
         players(set): 
-            Track players to prevent duplicates.
+            set of str to track players to prevent duplicates. 
 
         game_timer(GameTimerManager):
             tracks timers for matchmaking, ready-to-start, player moves. 
@@ -156,6 +160,16 @@ class GameManager:
         self.timers = GameTimerManager() # tracks timers for matchmaking, ready-to-start, player moves.
        
         self.players = set()  # Track players to prevent duplicates.
+
+
+    # ------- Subscriptions -------------
+    def subscribe(self, game_id: int, event: Event, callback: Callable[[Event], Awaitable[None]]):
+        self.games[game_id].listeners[event] = callback
+
+    def unsubscribe(self, game_id: int, event: Event):
+        self.games[game_id].listeners.pop(event, None)
+
+    # ------ Game Management -------------
 
     def create_game(self, player_name: str, matrix_size: int = 5):
         if len(self.games) >= MAX_GAMES:
@@ -198,16 +212,6 @@ class GameManager:
             game_id = randint(min_game_id, max_game_id)
             if game_id not in self.games:
                 return game_id
-    
-    def add_listener(self, game_id: int, cb: Callable):
-        if game_id in self.games:
-            self.games[game_id].listeners.append(cb)
-        
-
-    def remove_listener(self, game_id: int, cb: Callable):
-        if game_id in self.games:
-            self.games[game_id].listeners.remove(cb)
-
 
     @GameIdCheck(target_state = ge.GameState.WAIT_TO_SET_MATRIX)
     def join_game(self, game_id: int, player_name: str):
@@ -357,6 +361,10 @@ class GameManager:
             kind=TimerKind.PLAYER_MOVE, 
             callback=self._handle_move_timeout
         )
+
+        for event, callback in game.listeners.items():
+            if isinstance(event, GameStartedEvent):
+                asyncio.create_task(callback(event))
     
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)        
     def make_move(self, game_id: int , player_name: str, key: int):
@@ -370,12 +378,28 @@ class GameManager:
                 callback=self._handle_move_timeout
             )
             logger.debug(f"player {player.name} striked off {key} in game_{game_id}.")
-            return game.validateMove(key, player_name)
-        
+            move_state, msg =  game.validateMove(key, player_name)
+            self.process_move_state_change(game_id, move_state, msg)
+
+            return move_state, msg
         except ge.PlayerNotFoundException as e:
             msg = f"Player {player_name} not found!"
             logger.warning(msg)
             raise ValueError(msg + e)
+    
+    @GameIdCheck(target_state = None)   # no need to check game state for ending the game  
+    def process_move_state_change(self, game_id: int, move_state: ge.MoveState, msg: str):
+        game = self.games.get(game_id, None)
+        if move_state == ge.MoveState.WINNER:
+            for event, callback in game.listeners.items():
+                if isinstance(event, WinDeclaredEvent):
+                    event.winner_name = msg
+                    asyncio.create_task(callback(event))
+        elif move_state == ge.MoveState.DRAW:
+            for event, callback in game.listeners.items():
+                if isinstance(event, DrawDeclaredEvent):
+                    asyncio.create_task(callback(event))
+
         
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)      
     async def _handle_move_timeout(self, game_id: int):
@@ -407,4 +431,10 @@ class GameManager:
                 self.players.remove(p2.name)
         self.timers.cancel(game_id)  # Cancel any active start game timer
         logger.info(f"Game_{game_id} finished!")
+
+        for event, callback in game.listeners.items():
+            if isinstance(event, GameDroppedEvent):
+                asyncio.create_task(callback(event))
+
+        game.listeners.clear()  # Clear listeners to avoid memory leaks
 
