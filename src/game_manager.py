@@ -409,12 +409,15 @@ class GameManager:
 
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)     
     async def other_p_move(self, game_id: int, p_name: str):
+        move = self.recent_moves.get(game_id, None)
+        if move is None:
+            return None
         if self.games[game_id].whose_turn() == p_name:
             return None
-        elif self.recent_moves[game_id]['player_name'] == p_name:
+        elif move['player_name'] == p_name:
             return None
         else:
-            return self.recent_moves[game_id]['state'],self.recent_moves[game_id]['key']
+            return move['state'],move['key']
     
     @GameIdCheck(target_state= ge.GameState.READY)
     async def has_other_player_signalled(self, game_id: int, p_name: str):

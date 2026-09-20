@@ -16,32 +16,44 @@ gm = Gm()
 
 logger = logging.getLogger(__name__)
 
-@app.post('/create_game')
-async def create_game(player_name: Optional[str]):
+@app.get('/{game_id}/status')
+async def get_status(game_id: int):
     try:
-        game = gm.create_game(player_name)
+        g = gm.games.get(game_id, None)
+        if g is not None:
+            return {'state': g.state}, 200
+        else:
+            return {'state': None, 'message': "game not found"}, 500
+    except Exception as e:
+        return {'error': str(e)}, 400
+
+@app.post('/create_game')
+async def create_game(request: CreateIn):
+    try:
+        game = gm.create_game(**request.model_dump())
         # logger.info(f"Received create game request")
         return {'game_id': game.id}, 200
     except Exception as e:
         return {'error': str(e)}, 400
     
 @app.post('/join_game/{game_id}')
-async def join_game(game_id: int, player_name: Optional[str]):
+async def join_game(request: SignalReadyIn):
     try:
-        game = gm.join_game(game_id, player_name)
-        return {'message': f'Joined game {game.id} successfully.'}, 200
+        game = gm.join_game(**request.model_dump())
+        return {'message': f'Joined game {game.id} successfully.', 'game_id': game.id}, 200
     except Exception as e:
+        logger.warning(f'Cannot join game, {str(e)}')
         return {'error': str(e)}, 400
     
 @app.post('/join_random_game')
-async def join_random_game(player_name: Optional[str]):
+async def join_random_game(request: CreateIn):
     try:
-        game = gm.join_random_game(player_name)
+        game = gm.join_random_game(**request.model_dump())
         return {'game_id': game.id, 'message': f'Joined game {game.id} successfully.'}, 200
     except Exception as e:
         return {'error': str(e)}, 400
 
-@app.get('{game_id}/has_joined')
+@app.get('/{game_id}/has_joined')
 async def has_2nd_player_joined(game_id: int):
     """
         returns http status code `200` if other player has joined, Else `202`
@@ -50,9 +62,9 @@ async def has_2nd_player_joined(game_id: int):
         game = gm.games.get(game_id, None)
         if game is not None:
             if game.player2 is not None:
-                return {'game_id': game.id, 'message': f'Player 2 joined game {game.id} successfully.'}, 200
+                return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 joined game {game.id} successfully.'}, 200
             else :
-                return {'game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
+                return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
         else:
             return {'error': "Invalid game id"}, 500
     except Exception as e:
@@ -67,39 +79,39 @@ async def assign_matrix(request: AssignMatrixRequest):
         return {'error': str(e)}, 400
 
 @app.get('/{game_id}/has_assigned_matrix')
-async def has_other_player_assigned_matrix(game_id: int, player_name: Optional[str]):
+async def has_other_player_assigned_matrix(game_id: int, request: CreateIn):
     """
         returns http status code `200` if other player has assigned matrix, Else `202`
     """
     try:
         game = gm.games.get(game_id, None)
         if game is not None:
-            p = game.get_other_player(player_name)
-            if p.m is not None:
-                return {'game_id': game.id, 'message': f'Player {p.name} assigned matrix successfully.'}, 200
+            p_name = game.get_other_player(**request.model_dump()).name
+            if p_name in game.assigned_matrix:
+                return {'game_id': game.id, 'message': f'Player {p_name} assigned matrix successfully.'}, 200
             else :
-                return {'game_id': game.id, 'message': f'Player {p.name} not assigned matrix.'}, 202
+                return {'game_id': game.id, 'message': f'Player {p_name} not assigned matrix.'}, 202
         else:
             return {'error': "Invalid game id"}, 500
     except Exception as e:
         return {'error': str(e)}, 400
 
 @app.post('/start_game/{game_id}')
-async def signal_ready_to_start(game_id: int, player_name: str):
+async def signal_ready_to_start(game_id: int, request: CreateIn):
     try:
-        gm.signal_ready(game_id, player_name)
+        gm.signal_ready(game_id, **request.model_dump())
         return {'message': f'Player is ready to start.'}, 200
     except Exception as e:
         return {'error': str(e)}, 400 
 
 
-@app.get('{game_id}/has_signalled')
-async def has_other_signalled_ready(game_id: int, player_name: Optional[str]):
+@app.get('/{game_id}/has_signalled')
+async def has_other_signalled_ready(game_id: int, request: CreateIn):
     """
     returns http status code `200` if other player is ready, Else `202`
     """
     try:
-        if gm.has_other_player_signalled(game_id,player_name):
+        if gm.has_other_player_signalled(game_id,**request.model_dump()):
             return {'message': f'Player is ready to start.'}, 200
         else:
             return {'message': f'Player is not ready to start.'}, 202
@@ -114,14 +126,14 @@ async def make_move(request: GameMoveIn):
     except Exception as e:
         return {'error': str(e)}, 400 
 
-@app.get('{game_id}/has_opponent_moved')
-async def has_opponent_moved(game_id: int, player_name: Optional[str]):
+@app.get('/{game_id}/has_opponent_moved')
+async def has_opponent_moved(game_id: int, request: CreateIn):
     """
         returns http status code `200` if other player made their move, Else `202`.
     """
-    state, key = gm.other_p_move(game_id,player_name)
+    state, key = gm.other_p_move(game_id,**request.model_dump())
     try:
-        if gm.other_p_move(game_id,player_name) != None:
+        if gm.other_p_move(game_id,**request.model_dump()) != None:
             return {'message': f'other Player is made move.', 'key': key, 'state': state}, 200
         else:
             return {'message': f'other Player is not yet made move.'}, 202
