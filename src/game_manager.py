@@ -161,6 +161,8 @@ class GameManager:
        
         self.players = set()  # Track players to prevent duplicates.
 
+        self.recent_moves = dict()
+
 
     # ------- Subscriptions -------------
     def subscribe(self, game_id: int, event: Event, callback: Callable[[Event], Awaitable[None]]):
@@ -381,6 +383,11 @@ class GameManager:
             move_state, msg =  game.validateMove(key, player_name)
             self.process_move_state_change(game_id, move_state, msg)
 
+            self.recent_moves['game_id'] = {
+                'state': move_state,
+                'msg': msg,
+                'key': key
+            }
             return move_state, msg
         except ge.PlayerNotFoundException as e:
             msg = f"Player {player_name} not found!"
@@ -400,6 +407,19 @@ class GameManager:
                 if isinstance(event, DrawDeclaredEvent):
                     asyncio.create_task(callback(event))
 
+    @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)     
+    async def other_p_move(self, game_id: int, p_name: str):
+        if self.games[game_id].whose_turn() == p_name:
+            return None
+        elif self.recent_moves[game_id]['player_name'] == p_name:
+            return None
+        else:
+            return self.recent_moves[game_id]['state'],self.recent_moves[game_id]['key']
+    
+    @GameIdCheck(target_state= ge.GameState.READY)
+    async def has_other_player_signalled(self, game_id: int, p_name: str):
+        g = self.games.get(game_id, None)
+        return g.other_p_ready(p_name)
         
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)      
     async def _handle_move_timeout(self, game_id: int):
@@ -417,6 +437,7 @@ class GameManager:
         if game is not None:
             game.state = ge.GameState.FINISHED
             del self.games[game_id]
+            del self.recent_moves[game_id]
             p1 = game.player1
             p2 = game.player2
             if(
@@ -432,6 +453,7 @@ class GameManager:
         self.timers.cancel(game_id)  # Cancel any active start game timer
         logger.info(f"Game_{game_id} finished!")
 
+        # NOTE: Some error here
         for event, callback in game.listeners.items():
             if isinstance(event, GameDroppedEvent):
                 asyncio.create_task(callback(event))

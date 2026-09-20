@@ -1,6 +1,6 @@
 import random
 import logging
-import game_engine as ge
+import src.game_engine as ge
 
 logger = logging.getLogger(__name__)
 

@@ -5,152 +5,125 @@ The application interacts with the GameManager to manage game state and player i
 """
 # uses websockets
 import logging
-import asyncio
-from fastapi import ( 
-    FastAPI, WebSocket, WebSocketDisconnect
-)
+from typing import Optional
+from fastapi import FastAPI, Query
 from .models import *
 from .game_manager import GameManager as Gm
-from .game_engine import MoveState, GameState
-from .pubsub_utils import *
 
 app = FastAPI()
 
 gm = Gm()
 
-conn_manager = ConnectionManager()
-
 logger = logging.getLogger(__name__)
 
-# ------ Websocket Endpoints ------
-
-@app.websocket('/create_game')
-async def create_game(ws: WebSocket, player_name: str):
-    await conn_manager.connect(player_name, None, ws)
+@app.post('/create_game')
+async def create_game(player_name: Optional[str]):
     try:
         game = gm.create_game(player_name)
-        gm.subscribe(
-            game.id,
-            GameDroppedEvent(game_id=game.id),
-            notify_game_dropped
-        )
         # logger.info(f"Received create game request")
-        return ws.send_json({'game_id': game.id, 'message': f'Game {game.id} created successfully.'})
+        return {'game_id': game.id}, 200
     except Exception as e:
-        return ws.send_json({'error': str(e)})
-
-@app.websocket('/join_game/{game_id}')
-async def join_game(ws: WebSocket, game_id: int, player_name: str):
-    await conn_manager.connect(player_name, game_id, ws)
+        return {'error': str(e)}, 400
+    
+@app.post('/join_game/{game_id}')
+async def join_game(game_id: int, player_name: Optional[str]):
     try:
         game = gm.join_game(game_id, player_name)
-        return ws.send_json({'message': f'Joined game {game.id} successfully.'})
+        return {'message': f'Joined game {game.id} successfully.'}, 200
     except Exception as e:
-        return ws.send_json({'error': str(e)})
+        return {'error': str(e)}, 400
     
-@app.websocket('/join_random_game')
-async def join_random_game(ws: WebSocket, player_name: str):
-    await conn_manager.connect(player_name, None, ws)
+@app.post('/join_random_game')
+async def join_random_game(player_name: Optional[str]):
     try:
         game = gm.join_random_game(player_name)
-        return ws.send_json({'game_id': game.id, 'message': f'Joined game {game.id} successfully.'})
+        return {'game_id': game.id, 'message': f'Joined game {game.id} successfully.'}, 200
     except Exception as e:
-        return ws.send_json({'error': str(e)})
+        return {'error': str(e)}, 400
 
-@app.websocket('/assign_matrix/{game_id}')
-async def assign_matrix(ws: WebSocket, game_id: int, player_name: str):
-    await conn_manager.connect(player_name, game_id, ws)
-    try:
-        data = await ws.receive_json()
-        req = AssignMatrixRequest(**data)
-        gm.assign_matrix(**req.model_dump())
-        return ws.send_json({'message': 'Matrix assigned successfully.'})
-    except Exception as e:
-        return ws.send_json({'error': str(e)})
-    
-@app.websocket('/start_game/{game_id}')
-async def signal_ready_to_start(ws: WebSocket, game_id: int, player_name: str):
-    await conn_manager.connect(player_name, game_id, ws)
-    try:
-        data = await ws.receive_json()
-        req = SignalReadyIn(**data)
-        gm.signal_ready(**req.model_dump())
-        gm.subscribe(
-            game_id,
-            GameStartedEvent(game_id=game_id),
-            notify_game_started
-        )
-        gm.subscribe(
-            game_id,
-            WinDeclaredEvent(game_id=game_id, winner_name=None),
-            notify_win_declared
-        )
-        gm.subscribe(
-            game_id,
-            DrawDeclaredEvent(game_id=game_id),
-            notify_draw_declared
-        )
-        return await ws.send_json({'message': f'Player is ready to start.'})
-    except Exception as e:
-        return await ws.send_json({'error': str(e)})
-
-
-@app.websocket('/game/{game_id}/move')
-async def game_move(ws: WebSocket, game_id: int, player_name: str):
-    await conn_manager.connect(player_name, game_id, ws)
-    try:
-        data = await ws.receive_json()
-        req = GameMoveIn(**data)
-        move_state, msg = gm.make_move(**req.model_dump())
-        if move_state == MoveState.VALID_MOVE:
-            await conn_manager.sendall(game_id, player_name, {'event': 'player_moved', 'player_name': player_name, 'key': req.key})
-        return await ws.send_json({'message': msg, 'move_state': move_state.name})
-    except Exception as e:
-        return await ws.send_json({'error': str(e)})
-    
-
-# -------- PubSub Event Handlers --------
-
-def notify_game_started(event: GameStartedEvent):
-    logger.info(f"Game {event.game_id} has started.")
-    # Broadcast to all players in the game that the game has started
-    asyncio.create_task(conn_manager.broadcast(event.game_id, {'event': 'game_started'}))
-
-def notify_game_dropped(event: GameDroppedEvent):
-    logger.info(f"Game {event.game_id} has been dropped.")
-    # Broadcast to all players in the game that the game has been dropped
-    asyncio.create_task(conn_manager.broadcast(event.game_id, {'event': 'game_dropped'}))
-    conn_manager.disconnect_all(event.game_id)  # Disconnect all players from the dropped game
-
-def notify_win_declared(event: WinDeclaredEvent):
-    logger.info(f"Player {event.winner_name} has won the game {event.game_id}.")
-    # Broadcast to all players in the game that a win has been declared
-    asyncio.create_task(conn_manager.broadcast(event.game_id, {'event': 'win_declared', 'winner_name': event.winner_name}))
-
-def notify_draw_declared(event: DrawDeclaredEvent):
-    logger.info(f"Game {event.game_id} has ended in a draw.")
-    # Broadcast to all players in the game that a draw has been declared
-    asyncio.create_task(conn_manager.broadcast(event.game_id, {'event': 'draw_declared'}))
-
-
-# -------- REST Api endpoint --------
-
-@app.get('/game_state/{game_id}')
-async def get_game_state(game_id: int, player_name: str):
+@app.get('{game_id}/has_joined')
+async def has_2nd_player_joined(game_id: int):
     """
-     fetches the game state, mainly for reconnected players.
+        returns http status code `200` if other player has joined, Else `202`
     """
-    if game_id not in gm.games:
-        return {'error': 'Game not found'}, 404 
-    if player_name not in gm.games[game_id].players:
-        return {'error': 'Player not found in the game'}, 400
-    return {
-        'game_id': game_id,
-        'player_name': player_name,
-        'matrix': gm.games[game_id].players[player_name].matrix.to_list(),
-    }
+    try:
+        game = gm.games.get(game_id, None)
+        if game is not None:
+            if game.player2 is not None:
+                return {'game_id': game.id, 'message': f'Player 2 joined game {game.id} successfully.'}, 200
+            else :
+                return {'game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
+        else:
+            return {'error': "Invalid game id"}, 500
+    except Exception as e:
+        return {'error': str(e)}, 400
+
+@app.post('/assign_matrix/{game_id}')
+async def assign_matrix(request: AssignMatrixRequest):
+    try:
+        gm.assign_matrix(**request.model_dump())
+        return {'message': 'Matrix assigned successfully.'}, 200
+    except Exception as e:
+        return {'error': str(e)}, 400
+
+@app.get('/{game_id}/has_assigned_matrix')
+async def has_other_player_assigned_matrix(game_id: int, player_name: Optional[str]):
+    """
+        returns http status code `200` if other player has assigned matrix, Else `202`
+    """
+    try:
+        game = gm.games.get(game_id, None)
+        if game is not None:
+            p = game.get_other_player(player_name)
+            if p.m is not None:
+                return {'game_id': game.id, 'message': f'Player {p.name} assigned matrix successfully.'}, 200
+            else :
+                return {'game_id': game.id, 'message': f'Player {p.name} not assigned matrix.'}, 202
+        else:
+            return {'error': "Invalid game id"}, 500
+    except Exception as e:
+        return {'error': str(e)}, 400
+
+@app.post('/start_game/{game_id}')
+async def signal_ready_to_start(game_id: int, player_name: str):
+    try:
+        gm.signal_ready(game_id, player_name)
+        return {'message': f'Player is ready to start.'}, 200
+    except Exception as e:
+        return {'error': str(e)}, 400 
 
 
+@app.get('{game_id}/has_signalled')
+async def has_other_signalled_ready(game_id: int, player_name: Optional[str]):
+    """
+    returns http status code `200` if other player is ready, Else `202`
+    """
+    try:
+        if gm.has_other_player_signalled(game_id,player_name):
+            return {'message': f'Player is ready to start.'}, 200
+        else:
+            return {'message': f'Player is not ready to start.'}, 202
+    except Exception as e:
+        return {'error': str(e)}, 400 
         
+@app.post('/move/{game_id}')
+async def make_move(request: GameMoveIn):
+    try:
+        state, msg = gm.make_move(**request.model_dump())
+        return {'message': msg, 'state': state}, 200
+    except Exception as e:
+        return {'error': str(e)}, 400 
 
-
+@app.get('{game_id}/has_opponent_moved')
+async def has_opponent_moved(game_id: int, player_name: Optional[str]):
+    """
+        returns http status code `200` if other player made their move, Else `202`.
+    """
+    state, key = gm.other_p_move(game_id,player_name)
+    try:
+        if gm.other_p_move(game_id,player_name) != None:
+            return {'message': f'other Player is made move.', 'key': key, 'state': state}, 200
+        else:
+            return {'message': f'other Player is not yet made move.'}, 202
+    except Exception as e:
+        return {'error': str(e)}, 400 

@@ -246,6 +246,19 @@ class GameLogic:
             return self.player2
         else:
             raise PlayerNotFoundException("player not found!")  
+
+    def get_other_player(self, player_name: str) -> Player:
+            """ returns the player object for the given player name."""
+            if player_name == self.player1.name:
+                return self.player2
+            elif player_name == self.player2.name:
+                return self.player1
+            else:
+                raise PlayerNotFoundException("player not found!")
+
+    def other_p_ready(self, p_name):
+        other = self.get_other_player(p_name)
+        return other in self.ready_to_play
     
     def whose_turn(self) -> Player:
         """ Returns the player whose turn it is. """

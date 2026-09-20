@@ -4,7 +4,7 @@ This module configures test environment for app test in /test folder
 
 import pytest
 from fastapi import FastAPI
-from main import app as fastapi_app
+from .main import app as fastapi_app
 
 @pytest.fixture()
 def app():

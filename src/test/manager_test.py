@@ -1,9 +1,9 @@
 import pytest
 import asyncio
-import settings
+import src.settings as settings
 import logging
-import game_manager as Gm
-import game_engine as ge
+import src.game_manager as Gm
+import src.game_engine as ge
 from random import shuffle, randint
 
 
@@ -59,7 +59,8 @@ async def join_and_set_matrix(gm: Gm.GameManager, game: ge.GameLogic, delay=5):
     # await asyncio.sleep(delay)
     await assign_matrix_and_assert(gm, game, "pikachut")
     assert game.state == ge.GameState.READY
-# --- tests ---
+
+# ------------- tests --------------
 
 async def test_join_timer(gm, game):
     await asyncio.sleep(settings.GAME_JOIN_TIMEOUT + 5)
