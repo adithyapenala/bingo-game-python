@@ -2,6 +2,8 @@
 This module is for testing fastapi endpoint
 """
 
+from enum import Enum
+
 import pytest
 import asyncio
 import logging
@@ -112,14 +114,47 @@ async def opp_move(client: TestClient, game_id, p_name):
             break  
     return state
 
-def check_state(state):
-    if state == str(ge.MoveState.INVALID_MOVE):
-        return 0
-    elif state == str(ge.MoveState.WINNER) or state == str(ge.MoveState.DRAW):
-        return -1
-    assert state == str(ge.MoveState.VALID_MOVE)
-    return 1
+# def check_state(state):
+#     if state == str(ge.MoveState.INVALID_MOVE):
+#         return 0
+#     elif state == str(ge.MoveState.WINNER) or state == str(ge.MoveState.DRAW):
+#         return -1
+#     assert state == str(ge.MoveState.VALID_MOVE)
+#     return 1
 
+
+async def play_my_turn(client, game_id, p_name):
+    while True:
+        state, msg = await making_move(client, game_id, p_name)
+
+        if state == str(ge.MoveState.INVALID_MOVE):
+            continue
+
+        if state in (
+            str(ge.MoveState.WINNER),
+            str(ge.MoveState.DRAW),
+        ):
+            return state, msg, True
+
+        assert state == str(ge.MoveState.VALID_MOVE)
+        return state, msg, False
+
+async def play_opponent_turn(client, game_id, p_name):
+    while True:
+        state = await opp_move(client, game_id, p_name)
+
+        if state == str(ge.MoveState.INVALID_MOVE):
+            continue
+
+        if state in (
+            str(ge.MoveState.WINNER),
+            str(ge.MoveState.DRAW),
+        ):
+            return state, True
+
+        assert state == str(ge.MoveState.VALID_MOVE)
+        return state, False
+    
 # --------- test suit -----------
 @pytest.mark.asyncio
 async def test_full(client1, client2):
@@ -157,18 +192,15 @@ async def p2_full_test(client: TestClient, game_id):
 
     msg = None
     while True:
-        state = await opp_move(client, game_id, p_name)
-        c = check_state(state)
-        if c == 0:
-            continue
-        elif c == -1:
+        state, gameover = await play_opponent_turn(client, game_id, p_name)
+        if gameover: 
             break
-        state , msg = await making_move(client, game_id, p_name)
-        c = check_state(state)
-        if c == 0:
-            continue
-        elif c == -1:
+        assert state == str(ge.MoveState.VALID_MOVE)
+
+        state, gameover = await play_my_turn(client, game_id, p_name)
+        if gameover: 
             break
+        assert state == str(ge.MoveState.VALID_MOVE)
 
     return msg
   
@@ -190,22 +222,17 @@ async def p1_full_test(client: TestClient, game_id):
     msg = None
     await check_game_state(client, game_id, ge.GameState.IN_PROGRESS)
     while True:
-        state , msg = await making_move(client, game_id, p_name)
-
-        if state == str(ge.MoveState.INVALID_MOVE):
-            continue
-        elif state == str(ge.MoveState.WINNER) or state == str(ge.MoveState.DRAW):
+        state, gameover = await play_my_turn(client, game_id, p_name)
+        if gameover: 
             break
         assert state == str(ge.MoveState.VALID_MOVE)
 
-        state = await opp_move(client, game_id, p_name)
-
-        if state == str(ge.MoveState.INVALID_MOVE):
-            continue
-        elif state == str(ge.MoveState.WINNER) or state == str(ge.MoveState.DRAW):
+        state, gameover = await play_opponent_turn(client, game_id, p_name)
+        if gameover: 
             break
         assert state == str(ge.MoveState.VALID_MOVE)
-
+        
+                
     return msg
 
 
