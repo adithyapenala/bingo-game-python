@@ -219,7 +219,7 @@ class GameLogic:
 
         self.ready_to_play = set()
 
-        self.listeners = {}
+        self.listeners = dict()
 
     @classmethod
     def create_game(cls, game_id: int, player_name: str, matrix_size: int):

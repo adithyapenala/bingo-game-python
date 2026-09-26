@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import FastAPI, Query
 from .models import *
 from .game_manager import GameManager as Gm
+from .game_engine import GameState
 
 app = FastAPI()
 
@@ -61,10 +62,13 @@ async def has_2nd_player_joined(game_id: int):
     try:
         game = gm.games.get(game_id, None)
         if game is not None:
-            if game.player2 is not None:
+            if game.state == GameState.WAIT_TO_SET_MATRIX:
+                logger.debug(f'{game.player1.name} , {game.player2.name} are the players')
                 return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 joined game {game.id} successfully.'}, 200
-            else :
+            elif game.state == GameState.WAITING_TO_JOIN:
                 return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
+            else:
+                return {'message': 'invalid request'}, 500
         else:
             return {'error': "Invalid game id"}, 500
     except Exception as e:
@@ -79,18 +83,17 @@ async def assign_matrix(request: AssignMatrixRequest):
         return {'error': str(e)}, 400
 
 @app.get('/{game_id}/has_assigned_matrix')
-async def has_other_player_assigned_matrix(game_id: int, request: CreateIn):
+async def has_other_player_assigned_matrix(game_id: int):
     """
         returns http status code `200` if other player has assigned matrix, Else `202`
     """
     try:
         game = gm.games.get(game_id, None)
         if game is not None:
-            p_name = game.get_other_player(**request.model_dump()).name
-            if p_name in game.assigned_matrix:
-                return {'game_id': game.id, 'message': f'Player {p_name} assigned matrix successfully.'}, 200
+            if game.state == GameState.READY:
+                return {'game_id': game.id, 'message': f'All players assigned matrix successfully.', 'state': 'ready'}, 200
             else :
-                return {'game_id': game.id, 'message': f'Player {p_name} not assigned matrix.'}, 202
+                return {'game_id': game.id, 'message': f'Some players not assigned matrix.', 'state': 'wait'}, 202
         else:
             return {'error': "Invalid game id"}, 500
     except Exception as e:

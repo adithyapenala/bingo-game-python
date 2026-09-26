@@ -21,6 +21,18 @@ def test_score_calulator():
 
     assert m.score_main_diagonal_wise() == 1
 
+def test_score_calc_2():
+    flat = [i for i in range(1,26)]
+    data = [flat[i:i+5] for i in range(0,25,5)]
+    m = ge.Matrix(5,data)
+    assert m.score_row_wise() == 0
+
+    assert m.score_col_wise() == 0
+
+    assert m.score_anti_diagonal_wise() == 0
+
+    assert m.score_main_diagonal_wise() == 0
+
 def test_game_engine():
 
     game = ge.GameLogic.create_game(1, "player1", 5)

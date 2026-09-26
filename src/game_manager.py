@@ -95,8 +95,8 @@ class GameTimerManager:
     """Owns at most one active timer-task per game_id."""
 
     def __init__(self):
-        self._tasks: dict[int, asyncio.Task] = {}
-        self._kinds: dict[int, TimerKind] = {}
+        self._tasks: dict[int, asyncio.Task] = dict()
+        self._kinds: dict[int, TimerKind] = dict()
 
         logger.debug("GameTimer Manager crreated!")
 
@@ -155,7 +155,7 @@ class GameManager:
     """
     def __init__(self):
         # tracks active games.
-        self.games: dict[int, ge.GameLogic] = {} 
+        self.games: dict[int, ge.GameLogic] = dict()
 
         self.timers = GameTimerManager() # tracks timers for matchmaking, ready-to-start, player moves.
        
@@ -187,6 +187,7 @@ class GameManager:
         game_id = self.gen_gameid()
         game = ge.GameLogic(game_id, player_name, matrix_size)
         self.games[game_id] = game
+        game.state = ge.GameState.WAITING_TO_JOIN
         self.timers.start(
             game_id = game_id, 
             kind=TimerKind.MATCHMAKING, 
@@ -326,6 +327,8 @@ class GameManager:
         
         """
         game = self.games.get(game_id, None)
+        if game.state != ge.GameState.READY:
+            raise InvalidGameStateTransitionException(f"cannot signal_ready from {game.state}!")
         if (
             game.player1.name == player_name or
             game.player2.name == player_name
@@ -371,7 +374,8 @@ class GameManager:
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)        
     def make_move(self, game_id: int , player_name: str, key: int):
         game = self.games.get(game_id, None)
-        
+        if game.state != ge.GameState.IN_PROGRESS:
+            raise InvalidGameStateTransitionException(f"cannot make_move from {game.state}!")
         try:
             player = game.get_player(player_name)
             self.timers.start(

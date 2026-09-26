@@ -6,6 +6,7 @@ from enum import Enum
 
 import pytest
 import asyncio
+import threading
 import logging
 from random import randint
 # from ..settings import *
@@ -29,16 +30,16 @@ def client1():
 def client2():
     return TestClient(app)
 
-@pytest.fixture
-async def game(gm):
-    g = gm.create_game("pukachu", 5)
-    yield g
+# @pytest.fixture
+# async def game(gm):
+#     g = gm.create_game("pukachu", 5)
+#     yield g
 
-    try:
-        gm.end_game(g.id)   # cleanup runs after every test automatically
-    except Exception as e:
-        # logger.error("Error: Cannot end the game!"+ str(e))
-        pass
+#     try:
+#         gm.end_game(g.id)   # cleanup runs after every test automatically
+#     except Exception as e:
+#         # logger.error("Error: Cannot end the game!"+ str(e))
+#         pass
 
 # -------- helpers ----------
 async def check_game_state(client, game_id, target_state: ge.GameState):
@@ -64,7 +65,7 @@ async def assign_and_signal(client: TestClient, game_id, p_name):
         await asyncio.sleep(1)
         params = {'player_name': p_name}
         res = client.get(f'/{game_id}/has_assigned_matrix', params=params)
-        if res.status_code == 200:
+        if res.status_code == 200 and res.json()[0]['state'] == 'ready':
             logger.debug(f"Other +{res.json()[0].get('message', None)}")
             break
 
@@ -157,7 +158,7 @@ async def play_opponent_turn(client, game_id, p_name):
     
 # --------- test suit -----------
 @pytest.mark.asyncio
-async def test_full(client1, client2):
+async def test_full(client1: TestClient, client2: TestClient):
     p_name = 'pukachu'
     body = {'player_name': p_name}
     res =  client1.post('/create_game', json=body)
@@ -214,7 +215,7 @@ async def p1_full_test(client: TestClient, game_id):
         await asyncio.sleep(1)
         res = client.get(f'/{game_id}/has_joined')
         if res.status_code == 200 and res.json()[0].get('has_joined', None) == 'true':
-            logger.debug(f"{p_name} {res.json()[0].get('message', None)}")
+            logger.debug(f"{p_name} {res.json()[0]}")
             break
 
     await assign_and_signal(client, game_id, p_name)
@@ -236,8 +237,8 @@ async def p1_full_test(client: TestClient, game_id):
     return msg
 
 
-# @pytest.mark.asyncio
-# async def test_full_1_thread(client1, client2):
+@pytest.mark.asyncio
+async def test_full_single_thread(client1: TestClient, client2: TestClient):
     p_name1 = 'pukachu'
     body = {'player_name': p_name1}
     res =  client1.post('/create_game', json=body)
@@ -245,6 +246,12 @@ async def p1_full_test(client: TestClient, game_id):
     game_id = data.get('game_id', None)
     assert res.status_code == 200
     assert game_id is not None
+
+    await check_game_state(client1,game_id, ge.GameState.WAITING_TO_JOIN)
+
+    res = client1.get(f'/{game_id}/has_joined')
+    # assert res.status_code == 202
+    assert res.json()[0]['has_joined'] == 'false'
 
     p_name2 = "pikachut"
     res = client2.post(f'/join_game/{game_id}', json={'player_name': p_name2, 'game_id': game_id})
