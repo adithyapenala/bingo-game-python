@@ -6,7 +6,7 @@ The application interacts with the GameManager to manage game state and player i
 # uses websockets
 import logging
 from typing import Optional
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from .models import *
 from .game_manager import GameManager as Gm
 from .game_engine import GameState
@@ -66,10 +66,12 @@ async def has_2nd_player_joined(game_id: int):
                 logger.debug(f'{game.player1.name} , {game.player2.name} are the players')
                 return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 joined game {game.id} successfully.'}, 200
             elif game.state == GameState.WAITING_TO_JOIN:
-                return {'has_joined': 'true','game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
+                return {'has_joined': 'false','game_id': game.id, 'message': f'Player 2 not joined game {game.id}.'}, 202
             else:
+                logger.warning("invalid request")
                 return {'message': 'invalid request'}, 500
         else:
+            logger.warning("invalid request")
             return {'error': "Invalid game id"}, 500
     except Exception as e:
         return {'error': str(e)}, 400
@@ -100,22 +102,24 @@ async def has_other_player_assigned_matrix(game_id: int):
         return {'error': str(e)}, 400
 
 @app.post('/start_game/{game_id}')
-async def signal_ready_to_start(game_id: int, request: CreateIn):
+async def signal_ready_to_start(request: SignalReadyIn):
     try:
-        gm.signal_ready(game_id, **request.model_dump())
+        gm.signal_ready(**request.model_dump())
         return {'message': f'Player is ready to start.'}, 200
     except Exception as e:
         return {'error': str(e)}, 400 
 
 
 @app.get('/{game_id}/has_signalled')
-async def has_other_signalled_ready(game_id: int, request: CreateIn):
+async def has_other_signalled_ready(game_id: int):
     """
     returns http status code `200` if other player is ready, Else `202`
     """
     try:
-        if gm.has_other_player_signalled(game_id,**request.model_dump()):
-            return {'message': f'Player is ready to start.'}, 200
+        game = gm.games.get(game_id, None)
+        if game is not None:
+            if game.state == GameState.IN_PROGRESS:
+                return {'message': f'Player is ready to start.'}, 200
         else:
             return {'message': f'Player is not ready to start.'}, 202
     except Exception as e:
@@ -130,13 +134,13 @@ async def make_move(request: GameMoveIn):
         return {'error': str(e)}, 400 
 
 @app.get('/{game_id}/has_opponent_moved')
-async def has_opponent_moved(game_id: int, request: CreateIn):
+async def has_opponent_moved(game_id: int, player_name: Optional[str] = Query(None, description="Search term")):
     """
         returns http status code `200` if other player made their move, Else `202`.
     """
-    state, key = gm.other_p_move(game_id,**request.model_dump())
+    state, key = gm.other_p_move(game_id,player_name)
     try:
-        if gm.other_p_move(game_id,**request.model_dump()) != None:
+        if state is not None and key is not None:
             return {'message': f'other Player is made move.', 'key': key, 'state': state}, 200
         else:
             return {'message': f'other Player is not yet made move.'}, 202

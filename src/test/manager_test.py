@@ -80,13 +80,13 @@ class TestTimers:
         assert game.state == ge.GameState.READY
         assert game.player2.m.isValid()
 
-    async def test_ready_timer(self,tm: ManagerTester, gm: Gm.GameManager, game: ge.GameLogic):
+    async def test_ready_timer(self,tm: TestManager, gm: Gm.GameManager, game: ge.GameLogic):
         await tm.test_assign_matrix(gm, game)
         assert game.state == ge.GameState.READY
         await asyncio.sleep(settings.START_GAME_TIMEOUT + 5)
         assert game.state == ge.GameState.IN_PROGRESS
 
-    async def test_move_timer(self, tm: ManagerTester, gm: Gm.GameManager, game: ge.GameLogic):
+    async def test_move_timer(self, tm: TestManager, gm: Gm.GameManager, game: ge.GameLogic):
         await tm.test_signal_ready(gm, game)
         await asyncio.sleep(settings.MOVE_TIMEOUT + 5)
         assert gm.games.get(game.id, None) is None

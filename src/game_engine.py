@@ -24,6 +24,17 @@ class MoveState(StrEnum):
     DRAW = auto()
 
 class GameState(StrEnum):
+    """
+    WAITING_TO_JOIN: game just created by player1, waiting for player to join.
+
+    WAIT_TO_SET_MATRIX: player2 joined, waiting for players to assign matirces
+
+    READY: both players' matrices assigned, waiting for players ready signal
+
+    IN_PROGRESS: game started , moves in progress
+
+    FINISHED: win/termination condition acheived, game stop 
+    """
     WAITING_TO_JOIN = auto()        # just created by player1, waiting for player to join
     WAIT_TO_SET_MATRIX = auto()     # player2 joined, waiting for players to assign matirces
     READY = auto()                  # matrices assigned, waiting for players ready signal

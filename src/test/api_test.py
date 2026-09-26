@@ -71,14 +71,14 @@ async def assign_and_signal(client: TestClient, game_id, p_name):
 
     await check_game_state(client, game_id, ge.GameState.READY)
 
-    body = {'player_name': p_name}
+    body = {'player_name': p_name, 'game_id': game_id}
     res = client.post(f'/start_game/{game_id}', json=body)
     assert res.status_code == 200
     logger.debug(f"{p_name}+{res.json()[0].get('message', None)}")
 
     while True:
         await asyncio.sleep(1)
-        res = client.get(f'/{game_id}/has_signalled', params=params)
+        res = client.get(f'/{game_id}/has_signalled')
         if res.status_code == 200:
             logger.debug(f"Other +{res.json()[0].get('message', None)}")
             break
@@ -107,8 +107,7 @@ async def opp_move(client: TestClient, game_id, p_name):
         await asyncio.sleep(1)
         params = {'player_name': p_name}
         res = client.get(f'/{game_id}/has_opponent_moved', params=params)
-        if res.status_code == 200:
-            state = res.json()[0].get('state', None)
+        if res.status_code == 200 and res.json()[0].get('state', None) is not None:
             msg = res.json()[0].get('message', None)
             assert state is not None
             logger.debug(f"{p_name}+{state}+{msg}")
@@ -184,7 +183,7 @@ async def p2_full_test(client: TestClient, game_id):
     p_name = "pikachut"
     res = client.post(f'/join_game/{game_id}', json={'player_name': p_name, 'game_id': game_id})
     game_id = res.json()[0].get('game_id', None)
-    logger.debug(f"{p_name}+ {res.json().get('message', None)}")
+    logger.debug(f"{p_name}+ {res.json()[0].get('message', None)}")
 
     assert res.status_code == 200
     assert game_id is not None
@@ -198,7 +197,7 @@ async def p2_full_test(client: TestClient, game_id):
             break
         assert state == str(ge.MoveState.VALID_MOVE)
 
-        state, gameover = await play_my_turn(client, game_id, p_name)
+        state, _, gameover = await play_my_turn(client, game_id, p_name)
         if gameover: 
             break
         assert state == str(ge.MoveState.VALID_MOVE)
@@ -223,7 +222,7 @@ async def p1_full_test(client: TestClient, game_id):
     msg = None
     await check_game_state(client, game_id, ge.GameState.IN_PROGRESS)
     while True:
-        state, gameover = await play_my_turn(client, game_id, p_name)
+        state, _,gameover = await play_my_turn(client, game_id, p_name)
         if gameover: 
             break
         assert state == str(ge.MoveState.VALID_MOVE)
@@ -239,7 +238,7 @@ async def p1_full_test(client: TestClient, game_id):
 
 @pytest.mark.asyncio
 async def test_full_single_thread(client1: TestClient, client2: TestClient):
-    p_name1 = 'pukachu'
+    p_name1 = 'pukachu2'
     body = {'player_name': p_name1}
     res =  client1.post('/create_game', json=body)
     data = res.json()[0]
@@ -253,12 +252,16 @@ async def test_full_single_thread(client1: TestClient, client2: TestClient):
     # assert res.status_code == 202
     assert res.json()[0]['has_joined'] == 'false'
 
-    p_name2 = "pikachut"
+    p_name2 = "pikachut2"
     res = client2.post(f'/join_game/{game_id}', json={'player_name': p_name2, 'game_id': game_id})
     game_id = res.json()[0].get('game_id', None)
     logger.debug(f"{p_name2}+ {res.json()[0].get('message', None)}")
     assert res.status_code == 200
     assert game_id is not None
+
+    res = client1.get(f'/{game_id}/has_joined')
+    # assert res.status_code == 202
+    assert res.json()[0]['has_joined'] == 'true'
 
     m = ge.Matrix.create_random_matrix(5).to_list()
     body = {
@@ -280,12 +283,12 @@ async def test_full_single_thread(client1: TestClient, client2: TestClient):
     assert res.status_code == 200
     logger.debug(f"{p_name2}+{res.json()[0].get('message', None)}")
 
-    body = {'player_name': p_name1}
+    body = {'player_name': p_name1, 'game_id': game_id}
     res = client1.post(f'/start_game/{game_id}', json=body)
     assert res.status_code == 200
     logger.debug(f"{p_name1}+{res.json()[0].get('message', None)}")
 
-    body = {'player_name': p_name2}
+    body = {'player_name': p_name2, 'game_id': game_id}
     res = client2.post(f'/start_game/{game_id}', json=body)
     assert res.status_code == 200
     logger.debug(f"{p_name2}+{res.json()[0].get('message', None)}")
@@ -327,7 +330,7 @@ async def test_full_single_thread(client1: TestClient, client2: TestClient):
         logger.debug(f"{p_name2}+{state}+{msg}")
             
         if state == str(ge.MoveState.INVALID_MOVE):
-            making_move(client2,game_id, p_name2)
+            state, _, _ = await play_my_turn(client2,game_id, p_name2)
         elif state == str(ge.MoveState.WINNER) or state == str(ge.MoveState.DRAW):
             break
         assert state == str(ge.MoveState.VALID_MOVE)

@@ -412,14 +412,14 @@ class GameManager:
                     asyncio.create_task(callback(event))
 
     @GameIdCheck(target_state = ge.GameState.IN_PROGRESS)     
-    async def other_p_move(self, game_id: int, p_name: str):
+    def other_p_move(self, game_id: int, p_name: str):
         move = self.recent_moves.get(game_id, None)
         if move is None:
-            return None
+            return None, None
         if self.games[game_id].whose_turn() == p_name:
-            return None
+            return None, None
         elif move['player_name'] == p_name:
-            return None
+            return move['state'], None
         else:
             return move['state'],move['key']
     
